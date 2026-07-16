@@ -14,7 +14,7 @@ namespace:
   createResource: false
 
 configMap:
-  scenarioVersion: notification-hook-failure
+  scenarioVersion: baseline
   immutable: true
   scenarioValue: baseline
 
