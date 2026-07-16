@@ -72,7 +72,7 @@ notifications:
         when: app.status.operationState != nil && app.status.operationState.phase in ['Error', 'Failed']
   subscriptions:
     - recipients:
-        - webhook:webhook-site
+        - webhook-site
       triggers:
         - on-sync-failed
 
