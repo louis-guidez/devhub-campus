@@ -318,3 +318,13 @@ L'ancien Pod utilisant l'image `d022547` est resté `Running`, ce qui a permis a
 **Observation.** L'ajout du hook seul n'a pas déclenché l'auto-sync, car les hooks ne participent pas de la même manière au calcul `OutOfSync` des ressources normales. Une synchronisation manuelle a été lancée. Une première tentative avec `--force` a échoué, car cette option est incompatible avec `ServerSideApply=true`. Sans `--force`, l'opération a réussi en six secondes et ArgoCD a affiché le Job `Succeeded`, avec la phase `PreSync`, avant le Service, le Deployment et l'Ingress. Les logs contenaient `migration ok`.
 
 **Conclusion.** Un hook PreSync convient aux opérations qui doivent réussir avant le déploiement, comme une migration de schéma. Son échec bloque volontairement toute la sync. Il faut donc prévoir des logs, une stratégie de reprise et des migrations rétrocompatibles.
+
+### Scénario 5 — Sync waves
+
+**Manipulation.** Un ConfigMap a été placé dans la wave `-1` et le Deployment dans la wave `0`. Le Deployment portait une annotation `scenario-version` permettant de vérifier si sa wave avait réellement été appliquée. Après une première sync valide sur la valeur `baseline`, le ConfigMap a été rendu immutable. Un commit suivant a demandé simultanément la valeur `blocked` dans ses données et dans l'annotation du Deployment.
+
+**Observation.** Le Job PreSync a d'abord réussi. Kubernetes a ensuite rejeté le ConfigMap avec le message `field is immutable when immutable is set`. L'opération ArgoCD est restée en échec et a effectué des retries. Le ConfigMap réel et le Deployment ont tous les deux conservé la valeur `baseline` : la wave `0` n'a donc pas été appliquée après l'échec de la wave `-1`.
+
+Une première tentative utilisant un label de type numérique avait produit un `ComparisonError` avant toute sync. Elle ne démontrait pas les waves et a été remplacée par le cas du ConfigMap immutable, qui échoue réellement pendant l'application de la wave `-1`.
+
+**Conclusion.** Les sync waves imposent un ordre et empêchent les vagues suivantes de démarrer après un échec. Elles ne remplacent pas les hooks : les hooks déterminent une phase fonctionnelle, tandis que les waves ordonnent les ressources au sein des phases.
