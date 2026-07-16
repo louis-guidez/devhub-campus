@@ -13,6 +13,10 @@ progressDeadlineSeconds: 60
 namespace:
   createResource: false
 
+configMap:
+  scenarioVersion: baseline
+  failValidation: false
+
 service:
   type: ClusterIP
   port: 80

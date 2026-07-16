@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "annuaire.fullname" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    devhub.io/scenario-version: {{ .Values.configMap.scenarioVersion | quote }}
   labels:
     {{- include "annuaire.labels" . | nindent 4 }}
 spec:
