@@ -33,6 +33,11 @@ spec:
       path: platform/apps/dev
       directory:
         recurse: true
+    - repoURL: https://github.com/louis-guidez/devhub-campus.git
+      targetRevision: main
+      path: platform/apps/preview
+      directory:
+        recurse: true
 
   destination:
     server: https://kubernetes.default.svc

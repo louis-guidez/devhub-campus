@@ -4,6 +4,7 @@ image:
   pullPolicy: IfNotPresent
 
 replicaCount: 2
+environment: dev
 
 service:
   type: ClusterIP

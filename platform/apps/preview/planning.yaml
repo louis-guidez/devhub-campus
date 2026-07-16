@@ -1,18 +1,25 @@
-# ApplicationSet preview pour planning.
-# Une fois annuaire-preview.yaml fait, dupliquez en adaptant.
-#
-# TODO : à compléter à partir du modèle annuaire.yaml.
-
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: planning-preview
   namespace: argocd
 spec:
-  generators: []
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - pullRequest:
+        github:
+          owner: louis-guidez
+          repo: devhub-campus
+          tokenRef:
+            secretName: github-token
+            key: token
+        filters:
+          - branchMatch: "^feature/.*"
+        requeueAfterSeconds: 60
   template:
     metadata:
-      name: planning-preview-{{branch_slug}}
+      name: 'planning-preview-{{.branch_slug}}'
       labels:
         devhub.io/env: preview
         devhub.io/service: planning
@@ -20,18 +27,25 @@ spec:
       project: devhub
       source:
         repoURL: https://github.com/louis-guidez/devhub-campus.git
-        targetRevision: '{{branch}}'
+        targetRevision: '{{.head_sha}}'
         path: services/planning/chart
         helm:
           valueFiles:
             - values-preview.yaml
-          parameters: []
+          parameters:
+            - name: environment
+              value: preview
+            - name: image.tag
+              value: '{{.head_sha}}'
+            - name: ingress.host
+              value: 'planning-{{.branch_slug}}.devhub.local'
       destination:
         server: https://kubernetes.default.svc
-        namespace: devhub-preview-{{branch_slug}}
+        namespace: 'devhub-preview-{{.branch_slug}}'
       syncPolicy:
         automated:
           prune: true
           selfHeal: true
         syncOptions:
           - CreateNamespace=true
+          - ServerSideApply=true

@@ -244,3 +244,29 @@ Afin que les trois Applications enfants puissent devenir saines, les services `p
 Les endpoints `/healthz`, `/slots` et `/events` ont répondu avec le statut `200 OK`. Le service planning a notamment produit un message de niveau debug au démarrage. Son image initiale Debian Slim occupait 273 Mo ; le passage à Python Alpine et le retrait des extensions Uvicorn inutilisées ont ramené cette taille à 118 Mo.
 
 La root Application utilise le projet intégré `default` uniquement pour le bootstrap. Elle lit deux sources dans le dépôt de plateforme : `platform/projects`, puis `platform/apps/dev`. L'AppProject `devhub` porte la sync wave `-1`, afin d'être créé avant les Applications qui le référencent. Il autorise uniquement le dépôt DevHub, le cluster local et les namespaces `devhub-*`. La seule ressource cluster-scoped autorisée est `Namespace`.
+
+Après le bootstrap, la root est passée à `Synced + Healthy` et a créé ou configuré les trois Applications enfants `annuaire-dev`, `planning-dev` et `notif-dev`. Les trois services répondent avec le statut `200 OK` sur leurs Ingress respectifs :
+
+- `http://annuaire.devhub.local/healthz` ;
+- `http://planning.devhub.local/healthz` ;
+- `http://notif.devhub.local/healthz`.
+
+Un problème de compatibilité a été détecté après le bootstrap : kind 0.32 a créé un cluster Kubernetes 1.36, alors que la version 7.6.12 du chart fournie par le squelette installait ArgoCD 2.12.6. Le schéma statique de cette ancienne version ne connaissait pas le champ Kubernetes `Deployment.status.terminatingReplicas`, ce qui provoquait un `ComparisonError` malgré des workloads sains. Le chart ArgoCD a donc été mis à niveau vers la version 10.1.4, qui installe ArgoCD 3.4.5, afin d'aligner le contrôleur avec la version récente du cluster.
+
+### Pourquoi App of Apps n'est pas un simple kubectl apply
+
+Un `kubectl apply -f platform/apps/dev` ne ferait qu'envoyer une fois les manifests présents sur le poste de l'opérateur. Après cette commande, aucun composant ne garantirait que les ressources restent conformes au dépôt ni ne réagirait automatiquement à un nouveau commit. Avec App of Apps, la root conserve au contraire un lien permanent avec Git : elle détecte les ajouts, modifications et suppressions d'Applications, corrige leur drift avec `selfHeal` et nettoie les enfants retirés avec `prune`. Le bootstrap devient ainsi reproductible et continuellement réconcilié, au lieu d'être une opération ponctuelle dépendant du poste local.
+
+## Étape 7 — Environnements de preview
+
+Le générateur `pullRequest` a été retenu. La documentation actuelle d'ArgoCD limite le Git generator à la découverte de fichiers et de répertoires ; il n'énumère pas directement les branches d'un dépôt. Le pull request generator fournit en revanche la branche, son nom normalisé et son SHA, et supprime naturellement les Applications générées lorsque la PR est fermée.
+
+Trois ApplicationSets suivent les PR dont la branche correspond à `feature/*`. Pour une branche `feature/demo-prof`, ils génèrent :
+
+- `annuaire-preview-feature-demo-prof` ;
+- `planning-preview-feature-demo-prof` ;
+- `notif-preview-feature-demo-prof`.
+
+Les trois Applications ciblent le namespace partagé `devhub-preview-feature-demo-prof`. Elles utilisent `values-preview.yaml`, remplacent le tag d'image par le SHA complet de la tête de PR produit par la CI, et exposent des Ingress distincts préfixés par le nom du service. `CreateNamespace=true`, `selfHeal=true` et `prune=true` garantissent respectivement la création, la réconciliation et le nettoyage de la preview.
+
+Les charts ajoutent `devhub.io/env: preview` à toutes les ressources de preview. Le token utilisé pour interroger l'API GitHub est stocké uniquement dans un Secret Kubernetes du namespace `argocd` et n'est jamais versionné dans Git.

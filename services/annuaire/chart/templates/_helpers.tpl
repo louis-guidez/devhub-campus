@@ -13,6 +13,7 @@ app.kubernetes.io/name: {{ include "annuaire.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/part-of: devhub-campus
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+devhub.io/env: {{ .Values.environment }}
 {{- end -}}
 
 {{- define "annuaire.selectorLabels" -}}

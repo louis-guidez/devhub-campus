@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 CLUSTER ?= devhub
-ARGOCD_CHART_VERSION ?= 7.6.12
+ARGOCD_CHART_VERSION ?= 10.1.4
 INGRESS_CHART_VERSION ?= 4.11.3
 
 SERVICES := annuaire planning notif
