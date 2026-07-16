@@ -43,11 +43,38 @@ server:
   metrics:
     enabled: true
 
-# TODO étape 9 (défi) : activer la sous-chart notifications et
-# brancher un webhook qui envoie un message à chaque sync échouée.
-# notifications:
-#   enabled: true
-#   ...
+notifications:
+  enabled: true
+  metrics:
+    enabled: true
+  notifiers:
+    service.webhook.webhook-site: |
+      url: $webhook-url
+      headers:
+        - name: Content-Type
+          value: application/json
+  templates:
+    template.app-sync-failed-webhook: |
+      webhook:
+        webhook-site:
+          method: POST
+          body: |
+            {
+              "application": {{ toJson .app.metadata.name }},
+              "revision": {{ toJson .app.status.sync.revision }},
+              "error": {{ toJson .app.status.operationState.message }}
+            }
+  triggers:
+    trigger.on-sync-failed: |
+      - description: Application synchronization has failed
+        send:
+          - app-sync-failed-webhook
+        when: app.status.operationState.phase in ['Error', 'Failed']
+  subscriptions:
+    - recipients:
+        - webhook:webhook-site
+      triggers:
+        - on-sync-failed
 
 # Garde-fou ressources — utile en TP pour ne pas saturer la machine.
 controller:

@@ -348,3 +348,31 @@ Face à `OutOfSync + Degraded`, je procède dans cet ordre :
 3. j'inspecte les Pods associés, leur image, leurs probes et leurs logs, puis je compare la révision Git et les values Helm utilisées.
 
 `OutOfSync` décrit une différence avec Git, tandis que `Degraded` décrit un problème de fonctionnement. Les deux dimensions doivent être analysées séparément.
+
+## Étape 9 — Sécurité et observabilité d'ArgoCD
+
+### Comptes locaux et RBAC
+
+Deux comptes locaux ont été déclarés dans les values Helm : `developer` et `platform-admin`. Le compte `developer` est associé au rôle du même nom. Ce rôle autorise la lecture de toutes les Applications du projet `devhub`, mais limite l'action `sync` aux noms contenant `annuaire`. Le rôle `platform-admin` dispose de tous les droits.
+
+La politique utilise le mode de correspondance `glob`. Les tests réalisés avec une session `developer` ont produit les résultats suivants :
+
+- lecture de `planning-dev` : autorisée ;
+- synchronisation de `planning-dev` : refusée avec `PermissionDenied` sur `devhub/planning-dev` ;
+- synchronisation de `annuaire-dev` : autorisée et terminée avec succès en dix secondes.
+
+Le mot de passe admin oublié a été réinitialisé en remplaçant son hash bcrypt et son horodatage dans `argocd-secret`. Aucun mot de passe ou hash n'est stocké dans Git. Le mot de passe développeur utilisé pour la démonstration doit être remplacé par un secret fort si le cluster est exposé au-delà du poste local.
+
+### Exposition des métriques
+
+Les services de métriques Prometheus de l'application controller, du serveur API et du repo server ont été activés explicitement dans le fichier de values Helm. Les ServiceMonitors restent désactivés car aucune installation de Prometheus Operator n'est présente dans ce TP.
+
+Trois métriques du contrôleur ont été retenues :
+
+| Métrique | Type / unité | Utilité en incident |
+|---|---|---|
+| `argocd_app_info` | Gauge d'information, valeur 0 ou 1 avec labels | Donne l'état de sync et de santé par Application. Une requête peut compter immédiatement les Applications `OutOfSync`, `Degraded` ou `Unknown`. |
+| `argocd_app_sync_total` | Compteur de synchronisations | Permet de suivre le volume et le résultat des syncs. Une hausse des échecs après un changement de plateforme révèle une régression ou une source Git invalide. |
+| `argocd_app_reconcile` | Histogramme de durée en secondes | Mesure le temps de réconciliation. Une augmentation des quantiles signale un repo server lent, une API Kubernetes saturée ou un trop grand nombre de ressources à comparer. |
+
+Les endpoints ont été vérifiés par port-forward sur les Services `argocd-application-controller-metrics`, `argocd-server-metrics` et `argocd-repo-server-metrics`.
