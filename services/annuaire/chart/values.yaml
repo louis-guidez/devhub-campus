@@ -14,8 +14,8 @@ namespace:
   createResource: false
 
 configMap:
-  scenarioVersion: baseline
-  failValidation: false
+  scenarioVersion: blocked
+  failValidation: true
 
 service:
   type: ClusterIP
