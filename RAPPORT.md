@@ -310,3 +310,11 @@ L'ancien Pod utilisant l'image `d022547` est resté `Running`, ce qui a permis a
 **Mesure.** La convergence complète entre le push du revert et le retour à l'état sain a pris 33 secondes.
 
 **Conclusion.** Le rollback GitOps ne contourne pas le contrôleur avec `kubectl rollout undo` : il crée un nouveau commit traçable qui restaure l'état désiré précédent. Sa réussite dépend toutefois de la disponibilité de Git, d'ArgoCD et de l'ancienne image dans le registre.
+
+### Scénario 4 — Hook PreSync
+
+**Manipulation.** Un Job Helm annoté `argocd.argoproj.io/hook: PreSync` a été ajouté au chart annuaire. Il exécute une migration simulée avec l'image du service et affiche `migration ok`. La politique `BeforeHookCreation` permet de remplacer l'ancien Job lors d'une sync ultérieure.
+
+**Observation.** L'ajout du hook seul n'a pas déclenché l'auto-sync, car les hooks ne participent pas de la même manière au calcul `OutOfSync` des ressources normales. Une synchronisation manuelle a été lancée. Une première tentative avec `--force` a échoué, car cette option est incompatible avec `ServerSideApply=true`. Sans `--force`, l'opération a réussi en six secondes et ArgoCD a affiché le Job `Succeeded`, avec la phase `PreSync`, avant le Service, le Deployment et l'Ingress. Les logs contenaient `migration ok`.
+
+**Conclusion.** Un hook PreSync convient aux opérations qui doivent réussir avant le déploiement, comme une migration de schéma. Son échec bloque volontairement toute la sync. Il faut donc prévoir des logs, une stratégie de reprise et des migrations rétrocompatibles.
