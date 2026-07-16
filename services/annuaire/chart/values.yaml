@@ -14,9 +14,9 @@ namespace:
   createResource: false
 
 configMap:
-  scenarioVersion: baseline
+  scenarioVersion: blocked
   immutable: true
-  scenarioValue: baseline
+  scenarioValue: blocked
 
 service:
   type: ClusterIP
