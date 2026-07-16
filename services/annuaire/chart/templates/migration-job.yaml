@@ -24,7 +24,7 @@ spec:
           command:
             - node
             - -e
-            - 'console.log("migration ok")'
+            - 'console.error("migration failed"); process.exit(1)'
           resources:
             requests:
               cpu: 10m
