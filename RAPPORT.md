@@ -300,3 +300,13 @@ L'ancien Pod utilisant l'image `d022547` est resté `Running`, ce qui a permis a
 **Hypothèse et vérification.** ArgoCD considère la synchronisation réussie lorsque l'état désiré a été transmis à Kubernetes. La santé est une dimension distincte : Kubernetes avait accepté le manifeste mais ne pouvait pas exécuter l'image demandée.
 
 **Conclusion.** `Synced` ne signifie pas que l'application fonctionne. Face à `Synced + Degraded`, il faut examiner la ressource dégradée, puis l'état et les événements des Pods, et enfin leurs logs si le conteneur a pu démarrer.
+
+### Scénario 3 — Rollback par git revert
+
+**Manipulation.** Le commit fautif `b61980f` a été annulé avec `git revert`, sans modifier directement le cluster. Le revert a restauré le tag d'image `d022547` dans l'état désiré.
+
+**Observation.** L'Application est d'abord passée à `OutOfSync + Degraded`, puis ArgoCD a appliqué la révision de revert `d8f9bab`. Elle est revenue à `Synced + Healthy`, le Pod fautif a disparu et `/healthz` a répondu `200 OK`.
+
+**Mesure.** La convergence complète entre le push du revert et le retour à l'état sain a pris 33 secondes.
+
+**Conclusion.** Le rollback GitOps ne contourne pas le contrôleur avec `kubectl rollout undo` : il crée un nouveau commit traçable qui restaure l'état désiré précédent. Sa réussite dépend toutefois de la disponibilité de Git, d'ArgoCD et de l'ancienne image dans le registre.
