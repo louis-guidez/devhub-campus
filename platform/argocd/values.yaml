@@ -14,20 +14,21 @@ configs:
     # désactive le TLS interne — l'ingress-nginx est devant pour le HTTPS.
     server.insecure: true
   cm:
-    # TODO étape 9 : activer les notifications / l'OIDC / des comptes locaux.
-    # Pour l'étape 5, vous n'avez rien à ajouter ici.
     timeout.reconciliation: 180s
-    # TODO étape 9 : ajouter des `accounts.<user>: login, apiKey` pour
-    # créer un compte non-admin destiné aux tests RBAC.
+    accounts.developer: login, apiKey
+    accounts.platform-admin: login, apiKey
 
-  # TODO étape 9 : ajouter le RBAC ArgoCD ici.
-  # Référence : https://argo-cd.readthedocs.io/en/stable/operator-manual/rbac/
-  # rbac:
-  #   policy.default: ""
-  #   policy.csv: |
-  #     # TODO : un rôle developer + binding du compte créé ci-dessus
-  #     p, role:developer, applications, get, devhub/*, allow
-  #     # TODO : compléter pour autoriser le sync uniquement sur ses Apps
+  rbac:
+    policy.default: ""
+    policy.matchMode: glob
+    policy.csv: |
+      p, role:developer, applications, get, devhub/*, allow
+      p, role:developer, applications, sync, devhub/*annuaire*, allow
+      p, role:developer, projects, get, devhub, allow
+      g, developer, role:developer
+
+      p, role:platform-admin, *, *, *, allow
+      g, platform-admin, role:platform-admin
 
 server:
   ingress:
@@ -39,6 +40,8 @@ server:
       # de ne pas refaire de TLS terminaison côté server.
       nginx.ingress.kubernetes.io/backend-protocol: HTTP
     tls: false
+  metrics:
+    enabled: true
 
 # TODO étape 9 (défi) : activer la sous-chart notifications et
 # brancher un webhook qui envoie un message à chaque sync échouée.
@@ -48,11 +51,15 @@ server:
 
 # Garde-fou ressources — utile en TP pour ne pas saturer la machine.
 controller:
+  metrics:
+    enabled: true
   resources:
     requests: { cpu: "50m", memory: "256Mi" }
     limits:   { cpu: "1",   memory: "1Gi" }
 
 repoServer:
+  metrics:
+    enabled: true
   resources:
     requests: { cpu: "50m", memory: "128Mi" }
     limits:   { cpu: "500m", memory: "512Mi" }
