@@ -69,7 +69,7 @@ notifications:
       - description: Application synchronization has failed
         send:
           - app-sync-failed-webhook
-        when: app.status.operationState.phase in ['Error', 'Failed']
+        when: app.status.operationState != nil && app.status.operationState.phase in ['Error', 'Failed']
   subscriptions:
     - recipients:
         - webhook:webhook-site
