@@ -328,3 +328,23 @@ L'ancien Pod utilisant l'image `d022547` est resté `Running`, ce qui a permis a
 Une première tentative utilisant un label de type numérique avait produit un `ComparisonError` avant toute sync. Elle ne démontrait pas les waves et a été remplacée par le cas du ConfigMap immutable, qui échoue réellement pendant l'application de la wave `-1`.
 
 **Conclusion.** Les sync waves imposent un ordre et empêchent les vagues suivantes de démarrer après un échec. Elles ne remplacent pas les hooks : les hooks déterminent une phase fonctionnelle, tandis que les waves ordonnent les ressources au sein des phases.
+
+### Scénario 6 — Suppression avec prune
+
+**Manipulation.** `prune: true` a été activé sur `annuaire-dev`, puis le template `service.yaml` a été supprimé dans le commit `1227396`.
+
+**Observation.** Pendant l'opération, ArgoCD a affiché l'action `pruned` sur le Service. La commande Kubernetes a ensuite retourné `NotFound`, tandis que l'Application considérait le nouvel état désiré synchronisé. L'Ingress et le Deployment existaient toujours, mais l'accès applicatif ne pouvait plus fonctionner sans Service.
+
+**Vérification et restauration.** Le commit de suppression a été annulé par le revert `8e4d42d`. ArgoCD a recréé le Service avec une nouvelle ClusterIP, l'Application est revenue à `Synced + Healthy` et `/healthz` a répondu `200 OK`.
+
+**Conclusion.** `prune` rend les suppressions Git effectives dans le cluster et évite les ressources orphelines. Il augmente aussi la portée d'une erreur de commit ou de chemin source ; il doit être associé à des revues, des protections Git et des sauvegardes pour les ressources contenant des données.
+
+### Procédure de diagnostic
+
+Face à `OutOfSync + Degraded`, je procède dans cet ordre :
+
+1. j'ouvre l'arbre ArgoCD et les conditions de l'Application pour identifier la ressource à la fois différente et dégradée ;
+2. j'examine la ressource avec `kubectl describe`, en particulier les conditions et les événements Kubernetes ;
+3. j'inspecte les Pods associés, leur image, leurs probes et leurs logs, puis je compare la révision Git et les values Helm utilisées.
+
+`OutOfSync` décrit une différence avec Git, tandis que `Degraded` décrit un problème de fonctionnement. Les deux dimensions doivent être analysées séparément.
