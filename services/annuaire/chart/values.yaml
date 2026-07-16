@@ -15,7 +15,8 @@ namespace:
 
 configMap:
   scenarioVersion: baseline
-  failValidation: false
+  immutable: true
+  scenarioValue: baseline
 
 service:
   type: ClusterIP

@@ -6,8 +6,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
   labels:
     {{- include "annuaire.labels" . | nindent 4 }}
-    {{- if .Values.configMap.failValidation }}
-    invalid-label: 123
-    {{- end }}
+immutable: {{ .Values.configMap.immutable }}
 data:
   LOG_LEVEL: {{ .Values.env.LOG_LEVEL | quote }}
+  SCENARIO_VALUE: {{ .Values.configMap.scenarioValue | quote }}
