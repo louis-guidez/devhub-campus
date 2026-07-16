@@ -231,3 +231,16 @@ Le Pod était `1/1 Running`. Les endpoints `/healthz` et `/students`, exposés s
 `selfHeal: true` demande à ArgoCD de corriger automatiquement une ressource existante qui a été modifiée directement dans le cluster. Par exemple, si un utilisateur change manuellement le nombre de répliques du Deployment annuaire, ArgoCD restaure la valeur déclarée dans Git. Cette option serait dangereuse pendant un diagnostic d'urgence si une correction manuelle indispensable était immédiatement écrasée avant d'avoir pu être reportée dans Git.
 
 `prune: true` autorise ArgoCD à supprimer une ressource réelle lorsqu'elle n'existe plus dans la source Git rendue. Par exemple, retirer le template du Service entraîne la suppression du Service Kubernetes. Cette option serait dangereuse si le chemin source était accidentellement modifié vers un dossier vide ou si une ressource importante était retirée du dépôt par erreur : ArgoCD pourrait propager immédiatement cette suppression.
+
+## Étape 6 — Préparation de l'App of Apps
+
+Afin que les trois Applications enfants puissent devenir saines, les services `planning` et `notif` ont également été conteneurisés et publiés. Leurs images respectent les mêmes contraintes de sécurité que l'image annuaire.
+
+| Service | Image | Utilisateur | Taille disque | Taille du contenu | Digest |
+|---|---|---:|---:|---:|---|
+| planning | `ghcr.io/louis-guidez/planning:9f35860` | `1001:1001` | 118 Mo | 27,3 Mo | `sha256:6b98379c35d3497ee86f7c91d2078ba916f4b9e2ae5e663bf9f286c79ccffe9b` |
+| notif | `ghcr.io/louis-guidez/notif:a9cf89c` | `65532:65532` | 13,3 Mo | 2,85 Mo | `sha256:bae55d0066ec800cae9852afd5835391ab94504583f273345abe99ed834cd9f4` |
+
+Les endpoints `/healthz`, `/slots` et `/events` ont répondu avec le statut `200 OK`. Le service planning a notamment produit un message de niveau debug au démarrage. Son image initiale Debian Slim occupait 273 Mo ; le passage à Python Alpine et le retrait des extensions Uvicorn inutilisées ont ramené cette taille à 118 Mo.
+
+La root Application utilise le projet intégré `default` uniquement pour le bootstrap. Elle lit deux sources dans le dépôt de plateforme : `platform/projects`, puis `platform/apps/dev`. L'AppProject `devhub` porte la sync wave `-1`, afin d'être créé avant les Applications qui le référencent. Il autorise uniquement le dépôt DevHub, le cluster local et les namespaces `devhub-*`. La seule ressource cluster-scoped autorisée est `Namespace`.
