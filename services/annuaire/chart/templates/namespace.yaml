@@ -1,0 +1,14 @@
+{{- if .Values.namespace.createResource }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: {{ include "annuaire.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: devhub-campus
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    devhub.io/env: {{ .Values.environment }}
+{{- end }}

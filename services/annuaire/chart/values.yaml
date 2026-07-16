@@ -9,6 +9,9 @@ image:
 replicaCount: 2
 environment: dev
 
+namespace:
+  createResource: false
+
 service:
   type: ClusterIP
   port: 80

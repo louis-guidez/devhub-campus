@@ -35,6 +35,8 @@ spec:
           parameters:
             - name: environment
               value: preview
+            - name: namespace.createResource
+              value: "true"
             - name: image.tag
               value: '{{.head_sha}}'
             - name: ingress.host
