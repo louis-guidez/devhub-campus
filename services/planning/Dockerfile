@@ -2,7 +2,7 @@
 # Mêmes contraintes que les autres services (multi-stage, non-root, ≤ 200 Mo).
 
 # ---- Stage 1 : build / install des dépendances ----
-FROM python:3.12-slim AS build
+FROM python:3.12.11-alpine3.22 AS build
 
 WORKDIR /app
 
@@ -13,15 +13,14 @@ RUN python -m venv /opt/venv && \
 COPY app ./app
 
 # ---- Stage 2 : runtime ----
-FROM python:3.12-slim AS runtime
+FROM python:3.12.11-alpine3.22 AS runtime
 
 ARG SOURCE_REPOSITORY="https://github.com/louis-guidez/devhub-campus"
 LABEL org.opencontainers.image.source="${SOURCE_REPOSITORY}"
 
 WORKDIR /app
 
-RUN groupadd --gid 1001 app && \
-    useradd --uid 1001 --gid 1001 --no-create-home --shell /usr/sbin/nologin app
+RUN addgroup -S -g 1001 app && adduser -S -D -H -u 1001 -G app app
 
 COPY --from=build --chown=1001:1001 /opt/venv /opt/venv
 COPY --from=build --chown=1001:1001 /app/app ./app
