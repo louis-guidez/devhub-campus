@@ -8,6 +8,7 @@ image:
 
 replicaCount: 2
 environment: dev
+progressDeadlineSeconds: 60
 
 namespace:
   createResource: false

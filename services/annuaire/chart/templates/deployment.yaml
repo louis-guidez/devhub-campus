@@ -6,6 +6,7 @@ metadata:
     {{- include "annuaire.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
   selector:
     matchLabels:
       {{- include "annuaire.selectorLabels" . | nindent 6 }}
