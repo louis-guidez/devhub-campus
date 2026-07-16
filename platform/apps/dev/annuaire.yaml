@@ -11,19 +11,13 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  # La première Application utilise le projet intégré. Elle sera déplacée
-  # dans l'AppProject `devhub` à l'étape 6.
-  project: default
+  project: devhub
 
   source:
-    # TODO : URL de votre fork.
     repoURL: https://github.com/louis-guidez/devhub-campus.git
     targetRevision: main
-    # TODO : chemin vers le chart Helm du service.
     path: services/annuaire/chart
     helm:
-      # TODO : pointez vers le bon fichier de values.
-      # Indice : il y en a un par environnement.
       valueFiles:
         - values-dev.yaml
 

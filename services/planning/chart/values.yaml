@@ -28,12 +28,18 @@ resources:
     memory: 192Mi
 
 securityContext:
-  runAsNonRoot: true
-  runAsUser: 1001
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
   capabilities:
     drop: ["ALL"]
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
 
 probes:
   readiness:

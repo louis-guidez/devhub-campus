@@ -6,28 +6,33 @@ FROM python:3.12-slim AS build
 
 WORKDIR /app
 
-# TODO : copiez requirements.txt et installez les dépendances dans un venv ou un --user.
-# Pourquoi ne PAS faire un simple `pip install` global dans cette stage ?
-# (réponse dans RAPPORT.md)
+COPY requirements.txt ./
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --requirement requirements.txt
 
-# TODO : copiez le code de l'app.
+COPY app ./app
 
 # ---- Stage 2 : runtime ----
 FROM python:3.12-slim AS runtime
 
-# TODO : LABEL org.opencontainers.image.source.
+ARG SOURCE_REPOSITORY="https://github.com/louis-guidez/devhub-campus"
+LABEL org.opencontainers.image.source="${SOURCE_REPOSITORY}"
 
 WORKDIR /app
 
-# TODO : copiez depuis `build` le venv et le code, rien de plus.
+RUN groupadd --gid 1001 app && \
+    useradd --uid 1001 --gid 1001 --no-create-home --shell /usr/sbin/nologin app
 
-# TODO : créez l'utilisateur non-root, passez en USER.
+COPY --from=build --chown=1001:1001 /opt/venv /opt/venv
+COPY --from=build --chown=1001:1001 /app/app ./app
 
 ENV PORT=8080 \
     LOG_LEVEL=info \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8080
 
-# TODO : commande de démarrage (uvicorn app.main:app …).
-# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+USER 1001:1001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

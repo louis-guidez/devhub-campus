@@ -13,27 +13,23 @@ kind: AppProject
 metadata:
   name: devhub
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   description: Plateforme DevHub Campus
 
-  # TODO : listez ici les dépôts Git autorisés pour ce projet.
-  # Refusez tout dépôt qui n'est pas listé.
   sourceRepos:
-    # - https://github.com/louis-guidez/devhub-campus.git
-    # - …
+    - https://github.com/louis-guidez/devhub-campus.git
 
-  # TODO : listez ici les destinations autorisées (clusters + namespaces).
-  # Pour le TP, vous voulez :
-  #   - le cluster local (server: https://kubernetes.default.svc)
-  #   - les namespaces commençant par devhub-* (devhub-dev, devhub-preview-*)
   destinations:
-    # - server: https://kubernetes.default.svc
-    #   namespace: devhub-*
+    - server: https://kubernetes.default.svc
+      namespace: devhub-*
 
-  # TODO : restreignez les ressources cluster-scoped que ce projet peut créer.
-  # En l'état, vide = rien d'autorisé. C'est sûr mais ça bloque la création
-  # de namespaces. Réfléchissez à ce qu'il faut whitelister minimum.
-  clusterResourceWhitelist: []
+  # Les charts applicatifs n'ont besoin d'aucune autre ressource cluster-scoped.
+  # Namespace est autorisé pour l'option CreateNamespace=true.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
 
   # Ressources namespace-scoped autorisées. Par défaut * = tout. C'est OK
   # pour le TP, mais en prod vous restreindriez.
@@ -41,6 +37,6 @@ spec:
     - group: "*"
       kind: "*"
 
-  # TODO étape 6 (défi bonus) : ajoutez ici une `roles` (rôle developer)
+  # Défi bonus : ajoutez ici une `roles` (rôle developer)
   # et une `syncWindows` (fenêtre d'interdiction de sync 18h-8h).
   # Voir : https://argo-cd.readthedocs.io/en/stable/operator-manual/project-management/

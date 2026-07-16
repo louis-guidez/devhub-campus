@@ -1,0 +1,6 @@
+ingress:
+  enabled: true
+  host: notif.staging.devhub.local
+
+env:
+  LOG_LEVEL: info

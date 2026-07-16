@@ -13,7 +13,6 @@ spec:
   project: devhub
 
   source:
-    # TODO : URL de votre fork.
     repoURL: https://github.com/louis-guidez/devhub-campus.git
     targetRevision: main
     path: services/notif/chart
