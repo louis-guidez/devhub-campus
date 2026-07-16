@@ -376,3 +376,74 @@ Trois métriques du contrôleur ont été retenues :
 | `argocd_app_reconcile` | Histogramme de durée en secondes | Mesure le temps de réconciliation. Une augmentation des quantiles signale un repo server lent, une API Kubernetes saturée ou un trop grand nombre de ressources à comparer. |
 
 Les endpoints ont été vérifiés par port-forward sur les Services `argocd-application-controller-metrics`, `argocd-server-metrics` et `argocd-repo-server-metrics`.
+
+### Notifications
+
+Le notifications controller, son endpoint de métriques, un service webhook, un template JSON, le trigger `on-sync-failed` et une souscription globale ont été configurés. L'URL webhook.site est stockée uniquement dans `argocd-notifications-secret` sous la clé `webhook-url`.
+
+Un Job PreSync volontairement fautif a permis d'observer le trigger `on-sync-failed` en état `TRIGGERED`. Le premier envoi a échoué car la souscription utilisait `webhook:webhook-site` au lieu du nom de service personnalisé `webhook-site`. Cette syntaxe a été corrigée dans les values. La réception finale sur webhook.site n'a toutefois pas été démontrée avant la fin de la manipulation, car l'opération automatique restait dans sa politique de retries. La configuration est présente, mais la capture webhook demandée reste donc un livrable à compléter.
+
+Après les tests, le commit fautif a été annulé. Les trois Applications applicatives sont revenues à `Synced + Healthy` et l'annuaire répond de nouveau `200 OK`.
+
+## Étape 11 — ArgoCD, et la production ?
+
+### Rétrospective du TP 1 au TP 2
+
+| Opération | Ressenti et analyse avec ArgoCD |
+|---|---|
+| Premier déploiement | Le bootstrap est plus long qu'un `kubectl apply`, mais l'arbre ArgoCD rend ensuite la source, la destination et la santé beaucoup plus lisibles. |
+| Nouvelle version | Modifier un tag dans Git est simple et traçable. Il faut toutefois attendre la CI, le polling et la réconciliation. |
+| Rollback | Le `git revert` testé a restauré le service en 33 secondes. Il est plus auditable qu'un `rollout undo`, mais dépend de Git, d'ArgoCD et de la disponibilité de l'ancienne image. |
+| Nouvel environnement | Une nouvelle Application décrit l'environnement sans étendre les permissions de la CI. Le coût se déplace vers la conception des charts et de l'AppProject. |
+| Environnement personnel | ApplicationSet est le bénéfice le plus convaincant : une PR a créé puis supprimé trois services isolés sans accès Kubernetes donné au développeur. |
+| Voir ce qui tourne | L'interface rassemble révision, sync, santé et arbre de ressources. Elle ne remplace pas les événements et logs Kubernetes pour le diagnostic détaillé. |
+| Détecter un kubectl edit | Le passage à cinq répliques a été corrigé en moins de cinq secondes. Cette réaction est rassurante, mais peut écraser un hotfix manuel utile. |
+| Auto-réparer le drift | `selfHeal` garantit la conformité continue. Il impose que toute correction durable soit immédiatement reportée dans Git. |
+| Donner les droits à un développeur | Le rôle developer a pu lire toutes les Apps du projet et synchroniser uniquement annuaire. C'est plus précis qu'un kubeconfig, mais le DSL RBAC demande des tests rigoureux. |
+| Hotfix urgent | Une PR et une sync sont plus lentes qu'un `kubectl edit`. Cette contrainte améliore la traçabilité, mais peut être excessive si la procédure d'urgence est mal conçue. |
+| Audit sur six mois | Git conserve l'auteur, la révision et la justification attendue par commit. Les événements runtime et les actions UI doivent néanmoins être exportés vers une plateforme d'audit. |
+| Reconstruction du cluster | Après kind et Helm, une root Application a recréé le projet et les enfants. Les secrets hors Git et le bootstrap ArgoCD restent à restaurer séparément. |
+| Désinstaller un service | `prune` a supprimé le Service retiré de Git. Le mécanisme est propre mais dangereux pour une ressource stateful supprimée par erreur. |
+| Tester un changement risqué | La preview a exécuté les images du SHA de PR et montré le changement métier sans toucher au dev stable. Le coût principal est la consommation de ressources et la gestion DNS. |
+
+Les deux opérations les plus contraignantes avec ArgoCD sont le hotfix urgent et le bootstrap initial. Le hotfix exige un passage par Git alors qu'une commande directe serait plus rapide ; cette contrainte est justifiée si une voie d'urgence courte, revue et auditée existe. Le bootstrap demande de comprendre CRDs, projets, droits, ordre et secrets avant le premier service ; ce coût devient rentable lorsque le nombre de services et d'environnements augmente.
+
+Si une seule capacité devait justifier l'adoption d'ArgoCD pour DevHub Campus, ce serait la création et la suppression automatiques des previews par PR. Elle améliore directement l'autonomie des développeurs sans distribuer de kubeconfig ni de droits cluster à la CI.
+
+### 1. Déploiement progressif
+
+ArgoCD applique un état désiré, mais ne décide pas progressivement quel pourcentage de trafic reçoit une nouvelle version. En production, un mauvais tag peut donc être déployé sur toutes les répliques avant que les métriques métier ne révèlent la régression. J'ajouterais Argo Rollouts pour décrire une stratégie canary ou blue/green, piloter les ReplicaSets et interrompre la promotion selon des analyses. ArgoCD continuerait à synchroniser la ressource Rollout, tandis que Rollouts gérerait la progression. Référence : [documentation Argo Rollouts](https://argo-rollouts.readthedocs.io/).
+
+### 2. Validation des manifests avant synchronisation
+
+Les charts actuels peuvent encore demander une image non signée, des privilèges excessifs ou des ressources sans limites. ArgoCD détecte certaines erreurs de schéma, mais ce n'est pas un moteur de politique métier ou de sécurité. J'ajouterais Kyverno pour refuser à l'admission les images `latest`, les conteneurs root et l'absence de limites. Les mêmes policies seraient testées en CI avec la CLI Kyverno afin d'échouer avant la sync. Référence : [documentation Kyverno](https://kyverno.io/docs/).
+
+### 3. Gestion des secrets dans Git
+
+Le token GitHub des previews et l'URL du webhook ont dû rester hors Git et être créés manuellement. À l'échelle de plusieurs clusters, cette méthode devient non reproductible et favorise les secrets oubliés ou copiés. J'ajouterais External Secrets Operator connecté à un gestionnaire comme Vault ou un secret manager cloud. Git ne contiendrait que des références, et l'opérateur matérialiserait puis renouvellerait les Secrets Kubernetes. Référence : [documentation External Secrets Operator](https://external-secrets.io/latest/).
+
+### 4. Signature et provenance des images
+
+Un registre public peut contenir une image portant le bon nom et le bon tag sans garantir son origine. En l'état, le cluster exécuterait une image compromise si un compte ou un token de publication était volé. J'utiliserais cosign avec une signature keyless issue de GitHub Actions, puis une policy Kyverno ou Sigstore Policy Controller qui refuse les images non signées par l'identité CI attendue. Il faudrait aussi conserver les attestations SBOM et provenance. Référence : [documentation cosign](https://docs.sigstore.dev/cosign/).
+
+### 5. RBAC multi-équipe
+
+Le compte local developer convient à une démonstration, mais les mots de passe locaux et les règles glob ne passent pas à l'échelle. Une erreur de motif peut autoriser une sync sur le mauvais service, et le cycle de vie des comptes n'est pas relié à celui de l'école. Je connecterais ArgoCD à l'OIDC de l'organisation, mapperais les groupes aux rôles et isolerais chaque équipe avec un AppProject. Les politiques seraient testées avec `argocd admin settings rbac can`. Référence : [RBAC ArgoCD](https://argo-cd.readthedocs.io/en/stable/operator-manual/rbac/).
+
+### 6. Disaster recovery applicatif
+
+Git permet de recréer des Deployments et Services, mais ne restaure ni les données PostgreSQL, ni les PVC, ni les secrets externes. Une suppression avec prune pourrait rendre l'infrastructure cohérente tout en perdant les données métier. J'ajouterais Velero pour les ressources et snapshots de volumes, complété par des sauvegardes natives et testées du SGBD. Un plan de restauration doit préciser RPO, RTO, ordre de restauration et exercices réguliers. Référence : [documentation Velero](https://velero.io/docs/).
+
+### 7. Multi-cluster
+
+Le TP ne cible que `https://kubernetes.default.svc`. Avec plusieurs régions ou clusters, il faut inventorier les destinations, distribuer les credentials et éviter qu'une erreur de template touche tout le parc. J'utiliserais un modèle hub-and-spoke : une instance de gestion, des AppProjects par périmètre et un ApplicationSet `cluster generator` sélectionnant les clusters par labels. Pour réduire le rayon d'explosion, les promotions seraient progressives par groupes de clusters. Référence : [cluster generator ApplicationSet](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Cluster/).
+
+### Priorités après ArgoCD
+
+Mes trois premières briques seraient :
+
+1. **External Secrets Operator**, car l'absence de gestion reproductible des secrets bloque immédiatement un déploiement sérieux ;
+2. **Kyverno**, car une politique d'admission constitue le dernier garde-fou avant l'exécution d'un manifeste dangereux ;
+3. **Velero avec sauvegardes natives du SGBD**, car GitOps reconstruit la configuration mais pas les données du client.
+
+Argo Rollouts viendrait ensuite lorsque la plateforme disposerait de métriques fiables permettant d'automatiser une décision de promotion.
