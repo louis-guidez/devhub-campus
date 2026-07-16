@@ -14,6 +14,7 @@ const students = [
   { id: 1, nom: 'Adèle Ferrand',  promo: 'M2 IW' },
   { id: 2, nom: 'Bachir Saadi',   promo: 'M2 IW' },
   { id: 3, nom: 'Claire Dupond',  promo: 'M2 IW' },
+  { id: 4, nom: 'Demo Preview', promo: 'Feature branch' },
 ];
 
 const app = express();
