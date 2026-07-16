@@ -288,3 +288,15 @@ Après ajout du finalizer, la fermeture de la PR a supprimé les trois Applicati
 **Hypothèse et vérification.** La modification directe créait un écart entre l'état réel et le chart stocké dans Git. La politique automatisée avec `selfHeal: true` a détecté cet écart et réappliqué la valeur désirée sans commit ni intervention supplémentaire.
 
 **Conclusion.** Une modification manuelle du cluster n'est pas durable lorsque self-heal est actif. Toute correction d'urgence que l'on souhaite conserver doit être reportée dans Git, sinon ArgoCD l'écrase lors de sa réconciliation.
+
+### Scénario 2 — Image inexistante et état Synced + Degraded
+
+**Manipulation.** Le tag de l'image annuaire a été remplacé dans Git par `tag-inexistant`, puis le commit `b61980f` a été poussé. Le délai d'échec du rollout a été fixé à 60 secondes afin que Kubernetes déclare rapidement un rollout bloqué.
+
+**Observation.** ArgoCD a appliqué le nouveau Deployment et affiché `Synced`, mais le nouveau Pod est resté en `ImagePullBackOff`. Les événements Kubernetes indiquaient que la référence `ghcr.io/louis-guidez/annuaire:tag-inexistant` était introuvable. Après expiration du délai de progression, l'Application est passée à `Synced + Degraded`.
+
+L'ancien Pod utilisant l'image `d022547` est resté `Running`, ce qui a permis au Service de continuer à répondre pendant l'échec du rollout.
+
+**Hypothèse et vérification.** ArgoCD considère la synchronisation réussie lorsque l'état désiré a été transmis à Kubernetes. La santé est une dimension distincte : Kubernetes avait accepté le manifeste mais ne pouvait pas exécuter l'image demandée.
+
+**Conclusion.** `Synced` ne signifie pas que l'application fonctionne. Face à `Synced + Degraded`, il faut examiner la ressource dégradée, puis l'état et les événements des Pods, et enfin leurs logs si le conteneur a pu démarrer.
