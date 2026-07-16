@@ -20,6 +20,8 @@ spec:
   template:
     metadata:
       name: 'notif-preview-{{.branch_slug}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
       labels:
         devhub.io/env: preview
         devhub.io/service: notif

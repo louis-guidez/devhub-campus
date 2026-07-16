@@ -272,3 +272,7 @@ Les trois Applications ciblent le namespace partagé `devhub-preview-feature-dem
 Les charts ajoutent `devhub.io/env: preview` à toutes les ressources de preview. Le token utilisé pour interroger l'API GitHub est stocké uniquement dans un Secret Kubernetes du namespace `argocd` et n'est jamais versionné dans Git.
 
 Le premier test de suppression a mis en évidence que `CreateNamespace=true` crée le namespace mais ne le place pas automatiquement dans l'inventaire des ressources à pruner. Les Applications et leurs workloads avaient disparu, tandis que le namespace vide restait présent. Le chart annuaire a donc reçu un template `Namespace` conditionnel, activé uniquement par l'ApplicationSet de preview et appliqué en sync wave `-1`. Le namespace fait ainsi partie de l'état GitOps et peut être supprimé par le finalizer et `prune` lors de la fermeture de la PR.
+
+Un second test a permis d'isoler une autre condition nécessaire : les Applications générées doivent elles-mêmes porter `resources-finalizer.argocd.argoproj.io`. Sans ce finalizer, la suppression de l'objet Application ne déclenche pas la suppression en cascade de son inventaire, même si sa politique contient `prune: true`. Le finalizer a donc été ajouté aux trois templates ApplicationSet.
+
+Après ajout du finalizer, la fermeture de la PR a supprimé les trois Applications, leurs workloads et le namespace de preview. La commande `kubectl get namespace -l devhub.io/env=preview` n'a retourné aucune ressource. Le cycle création puis destruction automatique est donc validé.
