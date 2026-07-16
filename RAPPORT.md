@@ -1,0 +1,171 @@
+# TP 2 — GitOps avec ArgoCD : DevHub Campus
+
+## Étape 0 — Outillage
+
+Le poste utilisé pour le TP est un Mac Apple Silicon (`darwin/arm64`).
+
+| Outil | Version utilisée | Version minimale demandée | État |
+|---|---:|---:|---|
+| Docker | 29.5.3 | — | Conforme |
+| kubectl | 1.34.1 | 1.30 | Conforme |
+| Kustomize intégré à kubectl | 5.7.1 | — | Conforme |
+| Helm | 4.2.3 | 3.14 | Conforme, compatibilité avec le TP à surveiller |
+| kind | 0.32.0 | 0.22 | Conforme |
+| ArgoCD CLI | 3.4.5 | 2.11 | Conforme |
+| Git | 2.50.1 | 2.40 | Conforme |
+| yq | 4.53.3 | 4.40 | Conforme |
+
+Les versions ont été vérifiées avec les commandes suivantes :
+
+```text
+docker version
+kubectl version --client
+helm version
+kind version
+argocd version --client
+git --version
+yq --version
+```
+
+Le cluster local du TP est créé avec kind et porte le nom `devhub`. Il utilise la configuration `cluster/kind-config.yaml` fournie dans le squelette.
+
+Le contexte Kubernetes actif est `kind-devhub`. Le cluster contient deux nœuds Kubernetes 1.36.1 : un control-plane et un worker. Après l'initialisation, les deux nœuds sont passés à l'état `Ready` et tous les pods système étaient `Running`.
+
+## Étape 1 — GitOps en une page
+
+### Les quatre principes de GitOps
+
+1. **Déclaratif** : Git décrit l'état final attendu de la plateforme, par exemple la version d'une image, le nombre de répliques et la configuration de l'Ingress. Il ne contient pas une suite de commandes impératives à exécuter.
+2. **Versionné et immuable** : chaque changement de l'état désiré est enregistré dans un commit. L'historique permet de connaître l'auteur et la raison d'un changement, puis de revenir à une version précédente.
+3. **Tiré automatiquement** : un agent présent dans le cluster, ici ArgoCD, lit Git. La CI n'a donc pas besoin d'envoyer les manifests au cluster ni de posséder un kubeconfig de déploiement.
+4. **Réconcilié continuellement** : ArgoCD compare régulièrement l'état réel du cluster à l'état désiré dans Git. Il signale les écarts et peut les corriger automatiquement.
+
+### Comparaison des flux push et pull
+
+```text
+Modèle push
+
+Développeur ──push──> Git ──déclenche──> CI/CD ──kubectl apply──> Kubernetes
+                                         │
+                                         └── possède des droits sur le cluster
+
+Modèle pull / GitOps
+
+Développeur ──push──> Git <──lecture et comparaison── ArgoCD ──réconcilie──> Kubernetes
+                                                   installé dans le cluster
+```
+
+Dans le modèle push, la pipeline agit directement sur le cluster. Dans le modèle pull, Git contient l'état désiré et ArgoCD est responsable de faire converger Kubernetes vers cet état.
+
+| Question | Push (`kubectl apply` en CI) | Pull (ArgoCD) |
+|---|---|---|
+| Qui a les droits sur le cluster ? | La CI possède un kubeconfig ou un compte de service disposant de droits de déploiement. | ArgoCD possède les droits nécessaires dans le cluster ; la CI n'en a pas besoin. |
+| Où est l'historique des changements ? | Une partie se trouve dans Git et une autre dans l'historique d'exécution de la CI. Une action manuelle peut échapper aux deux. | L'état désiré et ses changements sont enregistrés dans Git. ArgoCD conserve aussi l'historique de ses synchronisations. |
+| Que se passe-t-il si un développeur modifie le cluster à la main ? | La dérive peut rester invisible jusqu'au prochain déploiement, qui risque de l'écraser. | ArgoCD détecte une différence `OutOfSync` et peut la corriger si `selfHeal` est activé. |
+| Comment ajouter un environnement de plus ? | Il faut adapter les manifests et la pipeline, créer les accès et autoriser la CI à cibler le nouvel environnement. | On ajoute dans Git une `Application` ou une règle `ApplicationSet` décrivant la nouvelle destination. |
+| Comment faire un rollback ? | On relance la CI avec une ancienne version ou on utilise une commande Kubernetes comme `kubectl rollout undo`. | On effectue un `git revert` ; ArgoCD détecte le nouvel état désiré et réconcilie le cluster. |
+| Combien de pipelines pour 30 services ? | Chaque service possède généralement une pipeline avec une logique et des identifiants de déploiement à maintenir. | Les pipelines construisent les images, tandis qu'ArgoCD peut piloter les déploiements des 30 services depuis des déclarations homogènes. |
+| Qui voit en direct ce qui tourne ? | Les personnes ayant accès à Kubernetes ou aux sorties des pipelines doivent croiser plusieurs sources. | Les utilisateurs autorisés voient dans l'interface ArgoCD la révision, la santé et l'état de synchronisation. |
+
+### Prise de position personnelle
+
+Pour un petit projet personnel, je commencerais par un modèle push, car il est plus rapide à mettre en place et le coût initial d'ArgoCD serait difficile à justifier pour un seul service et un seul environnement. Je passerais au modèle pull dès que le projet comporte plusieurs environnements, plusieurs services ou plusieurs contributeurs, car la détection du drift, la traçabilité et la centralisation des déploiements deviennent alors réellement utiles.
+
+## Étape 2 — Glossaire ArgoCD
+
+### Application
+
+Une `Application` est une ressource personnalisée ArgoCD qui associe une source versionnée à une destination Kubernetes. Elle précise notamment le dépôt Git, la révision, le chemin des manifests ou du chart Helm, le cluster et le namespace cibles, ainsi que la politique de synchronisation.
+
+**Exemple dans DevHub Campus :** l'`Application` `annuaire-dev` lit le chart du service annuaire sur la branche `main` et le déploie dans le namespace `devhub-dev`. Elle ne doit pas être confondue avec l'application métier annuaire elle-même.
+
+### AppProject
+
+Un `AppProject` représente une frontière de sécurité et d'organisation dans ArgoCD. Il contrôle les dépôts sources autorisés, les clusters et namespaces de destination, les types de ressources utilisables et éventuellement les rôles et fenêtres de synchronisation.
+
+**Exemple dans DevHub Campus :** le projet `devhub` autorise seulement les dépôts des services du campus et les namespaces dont le nom commence par `devhub-`. Ce n'est ni un dépôt Git ni un namespace Kubernetes.
+
+### Source
+
+La `source` indique à ArgoCD où trouver l'état désiré. Elle peut désigner un dépôt Git, un chemin dans ce dépôt et une révision, ou directement un chart Helm publié.
+
+**Exemple dans DevHub Campus :** la source de `planning-dev` est la branche `main` du dépôt DevHub, au chemin `services/planning/chart`, avec le fichier `values-dev.yaml`.
+
+### Destination
+
+La `destination` est l'endroit où ArgoCD doit créer les ressources rendues depuis la source. Elle est composée d'un cluster Kubernetes et d'un namespace.
+
+**Exemple dans DevHub Campus :** les trois services stables ciblent le cluster `https://kubernetes.default.svc` et le namespace `devhub-dev`, tandis qu'une preview cible un namespace `devhub-preview-*`.
+
+### Sync
+
+Une synchronisation est l'opération par laquelle ArgoCD compare l'état désiré à l'état réel puis applique les changements nécessaires. Elle peut être manuelle ou automatique. L'option `selfHeal` permet de corriger automatiquement une dérive créée directement dans le cluster.
+
+**Exemple dans DevHub Campus :** après un commit changeant le tag de l'image annuaire, ArgoCD synchronise le `Deployment` afin qu'il utilise cette nouvelle image. Contrairement à un simple `kubectl apply`, ArgoCD conserve le lien avec Git et continue ensuite à surveiller la ressource.
+
+### Prune
+
+Le `prune` autorise ArgoCD à supprimer du cluster une ressource qui n'existe plus dans l'état désiré stocké dans Git. Il complète la synchronisation, qui ne supprimerait sinon pas nécessairement les anciennes ressources.
+
+**Exemple dans DevHub Campus :** si `service.yaml` est supprimé du chart annuaire et que `prune` est actif, ArgoCD supprime le `Service` correspondant. Pour les previews, `prune` est indispensable afin de nettoyer les ressources après la suppression d'une branche.
+
+### App of Apps
+
+Le pattern App of Apps utilise une `Application` racine dont le contenu est un ensemble de manifests d'autres `Application`. La racine permet ainsi à ArgoCD de créer et de piloter déclarativement les applications enfants.
+
+**Exemple dans DevHub Campus :** l'Application `root` lit `platform/apps/dev/` et crée `annuaire-dev`, `planning-dev` et `notif-dev`. Ce n'est pas un chart Helm qui embarque les trois charts des services.
+
+### ApplicationSet
+
+Un `ApplicationSet` est une ressource qui génère plusieurs `Application` à partir d'un modèle et d'une source de paramètres appelée generator. Il évite de copier manuellement presque le même manifeste pour chaque branche, PR, cluster ou environnement.
+
+**Exemple dans DevHub Campus :** un générateur inspecte les branches `feature/*` et produit pour chacune une Application de preview avec un nom, un namespace et un Ingress propres.
+
+### Sync wave
+
+Une sync wave donne un ordre relatif aux ressources d'une même synchronisation. Les valeurs les plus basses sont traitées en premier ; ArgoCD attend que la vague précédente soit correctement appliquée avant de poursuivre.
+
+**Exemple dans DevHub Campus :** un `ConfigMap` annoté avec la vague `-1` est appliqué avant le `Deployment` annoté avec la vague `0`. Une vague n'est pas une boucle de nouvelle tentative.
+
+### Hooks PreSync, Sync et PostSync
+
+Les hooks sont des ressources exécutées pendant une phase précise de la synchronisation. Un hook `PreSync` s'exécute avant les ressources normales, un hook `Sync` pendant la synchronisation et un hook `PostSync` après une synchronisation réussie. Un échec de `PreSync` bloque la suite du déploiement.
+
+**Exemple dans DevHub Campus :** un `Job` `PreSync` simule une migration de base de données et affiche `migration ok` avant le déploiement du service annuaire. Ce mécanisme ne doit pas être confondu avec un webhook ou un déclencheur Git.
+
+### Différences importantes
+
+- `Refresh` demande à ArgoCD de relire la source et de recalculer l'écart ; `Sync` applique cet état au cluster.
+- `selfHeal` corrige une ressource modifiée hors de Git ; `prune` supprime une ressource qui a disparu de Git.
+- Une sync wave détermine un ordre entre ressources ; un hook associe une ressource à une phase du déploiement.
+- Une `Application` déploie un état ; un `ApplicationSet` produit plusieurs objets `Application` à partir d'un modèle.
+
+## Étape 3 — Conteneurisation du service annuaire
+
+Le service choisi pour détailler la conteneurisation est `annuaire`, écrit en Node.js avec Express. Avant sa publication, son image a été construite et testée localement sous le nom `devhub-annuaire:test`.
+
+### Choix de construction
+
+Le Dockerfile utilise deux stages basés sur Node.js 20 Alpine. Le premier stage installe les dépendances de production de façon reproductible avec `npm ci --omit=dev`. Le second ne récupère que `node_modules`, le code source et `package.json`. Cette séparation évite de copier le cache npm et les fichiers de construction inutiles dans l'image finale.
+
+Le processus s'exécute avec l'UID et le GID `1001`, et non avec `root`. Cet identifiant sera également déclaré dans le `securityContext` Kubernetes du chart Helm. Aucun secret n'est transmis par `ARG` ou `ENV`. Le label OCI `org.opencontainers.image.source` est renseigné au moment du build avec l'URL du dépôt Git.
+
+### Validation locale
+
+L'image a été démarrée avec `LOG_LEVEL=debug`. Le service a produit un message de niveau debug puis un message indiquant son écoute sur le port 8080 :
+
+```text
+{"level":"debug","msg":"LOG_LEVEL=debug"}
+{"level":"info","msg":"annuaire up on :8080"}
+```
+
+Les deux endpoints ont été testés :
+
+| Endpoint | Résultat |
+|---|---|
+| `GET /healthz` | `200 OK`, avec `{"ok":true,"service":"annuaire"}` |
+| `GET /students` | `200 OK`, avec la liste JSON des étudiants |
+
+Le fichier `package-lock.json` a été généré afin de verrouiller les versions transitives et de permettre l'utilisation de `npm ci` dans le build.
+
+L'inspection finale a confirmé que le conteneur s'exécute avec `user=1001:1001`. Docker Desktop indique une occupation disque de 197 Mo et une taille de contenu de 48,8 Mo. L'image respecte donc la limite de 200 Mo demandée, avec une marge faible sur la mesure d'occupation locale.
