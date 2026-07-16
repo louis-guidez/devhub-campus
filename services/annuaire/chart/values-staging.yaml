@@ -1,0 +1,8 @@
+# Surcharges de l'environnement de staging.
+
+ingress:
+  enabled: true
+  host: annuaire.staging.devhub.local
+
+env:
+  LOG_LEVEL: info

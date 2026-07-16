@@ -11,8 +11,6 @@ spec:
     - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
-          # TODO : path et pathType.
-          # Indice : pathType: Prefix vs. ImplementationSpecific — réfléchissez.
           - path: {{ .Values.ingress.path }}
             pathType: Prefix
             backend:

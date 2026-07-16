@@ -2,13 +2,10 @@
 # Surchargées par values-dev.yaml et values-preview.yaml selon l'environnement.
 
 image:
-  # TODO : votre repo GHCR.
   repository: ghcr.io/louis-guidez/annuaire
-  # TODO : remplir au déploiement avec le SHA court.
-  tag: ""
+  tag: "d022547"
   pullPolicy: IfNotPresent
 
-# TODO : combien de répliques par défaut ?
 replicaCount: 2
 
 service:
@@ -19,7 +16,6 @@ service:
 ingress:
   enabled: false
   className: nginx
-  # TODO : nom DNS local par défaut.
   host: annuaire.devhub.local
   path: /
 
@@ -40,13 +36,18 @@ resources:
     memory: 128Mi
 
 securityContext:
-  # TODO : alignez avec le USER de votre Dockerfile.
-  runAsNonRoot: true
-  runAsUser: 1001
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
   capabilities:
     drop: ["ALL"]
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
 
 probes:
   readiness:

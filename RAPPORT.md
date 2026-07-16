@@ -169,3 +169,47 @@ Les deux endpoints ont été testés :
 Le fichier `package-lock.json` a été généré afin de verrouiller les versions transitives et de permettre l'utilisation de `npm ci` dans le build.
 
 L'inspection finale a confirmé que le conteneur s'exécute avec `user=1001:1001`. Docker Desktop indique une occupation disque de 197 Mo et une taille de contenu de 48,8 Mo. L'image respecte donc la limite de 200 Mo demandée, avec une marge faible sur la mesure d'occupation locale.
+
+### Publication dans GHCR
+
+L'image finale a été taguée avec le SHA court du commit, sans utiliser le tag `latest`, puis publiée dans GitHub Container Registry :
+
+```text
+ghcr.io/louis-guidez/annuaire:d022547
+```
+
+Le registre a retourné le digest immuable suivant :
+
+```text
+sha256:8ff8d6ecd2d26e859884c4b971aac6d5b5a833a64e048825139ba0c0f24710bd
+```
+
+## Étape 4 — Chart Helm du service annuaire
+
+Le chart `services/annuaire/chart` produit un `Deployment`, un `Service` et, selon les values, un `Ingress`. Les éléments communs de nommage et de labels sont centralisés dans `_helpers.tpl` afin d'éviter les divergences entre ressources.
+
+Les paramètres principaux sont exposés dans `values.yaml` : dépôt et tag de l'image, nombre de répliques, ports, niveau de log, Ingress, ressources, sécurité et probes. Trois surcharges limitées aux différences de chaque environnement sont disponibles :
+
+- `values-dev.yaml` active l'Ingress local, le niveau debug et une seule réplique ;
+- `values-staging.yaml` active l'Ingress de staging avec deux répliques héritées des valeurs par défaut ;
+- `values-preview.yaml` réduit le nombre de répliques et les ressources, et prépare un hôte qui sera remplacé par l'`ApplicationSet`.
+
+Toutes les ressources portent les labels `app.kubernetes.io/name`, `app.kubernetes.io/instance`, `app.kubernetes.io/part-of: devhub-campus` et `app.kubernetes.io/managed-by: Helm`. Le sélecteur des Pods utilise uniquement les labels stables `name` et `instance`.
+
+Le Pod impose l'UID/GID `1001`, `runAsNonRoot` et le profil seccomp `RuntimeDefault`. Le conteneur interdit l'élévation de privilèges, utilise un système de fichiers racine en lecture seule et abandonne toutes les capabilities Linux. Les probes de disponibilité et de vivacité interrogent `/healthz` sur le port HTTP nommé.
+
+La commande `helm lint services/annuaire/chart` a produit le résultat suivant :
+
+```text
+1 chart(s) linted, 0 chart(s) failed
+```
+
+Le rendu avec `values-dev.yaml` contient une réplique, l'image `ghcr.io/louis-guidez/annuaire:d022547`, les deux probes, les contextes de sécurité et l'Ingress `annuaire.devhub.local`.
+
+La validation Kubernetes locale a également réussi :
+
+```text
+service/annuaire-annuaire created (dry run)
+deployment.apps/annuaire-annuaire created (dry run)
+ingress.networking.k8s.io/annuaire-annuaire created (dry run)
+```
