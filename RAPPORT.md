@@ -213,3 +213,21 @@ service/annuaire-annuaire created (dry run)
 deployment.apps/annuaire-annuaire created (dry run)
 ingress.networking.k8s.io/annuaire-annuaire created (dry run)
 ```
+
+## Étape 5 — Installation d'ArgoCD et première Application
+
+ArgoCD a été installé avec le chart officiel `argo/argo-cd` dans le namespace `argocd`. Le contrôleur ingress-nginx a été installé auparavant afin d'exposer l'interface sur `argocd.devhub.local`. Tous les composants ArgoCD, y compris l'application controller, l'ApplicationSet controller, le repo server, Redis et le server, ont atteint l'état `Running` et `Ready`.
+
+Le mot de passe initial du compte `admin` a été récupéré depuis le secret de bootstrap, utilisé pour la première connexion, puis immédiatement remplacé. Le secret initial a ensuite été supprimé. Aucun mot de passe n'est conservé dans le dépôt ni dans ce rapport.
+
+### Première synchronisation
+
+L'Application `annuaire-dev` a d'abord été créée avec une politique de synchronisation manuelle. Avant la première sync, ArgoCD indiquait `OutOfSync + Missing`, car le Service, le Deployment et l'Ingress existaient dans Git mais pas encore dans Kubernetes. Après la synchronisation manuelle, elle est passée à `Synced + Healthy` sur la révision `92a2164`.
+
+Le Pod était `1/1 Running`. Les endpoints `/healthz` et `/students`, exposés sur `http://annuaire.devhub.local`, ont tous les deux répondu avec le statut `200 OK`. Une fois ce déploiement validé, l'auto-sync et `selfHeal` ont été activés, tandis que `prune` est resté désactivé.
+
+### Différence entre self-heal et prune
+
+`selfHeal: true` demande à ArgoCD de corriger automatiquement une ressource existante qui a été modifiée directement dans le cluster. Par exemple, si un utilisateur change manuellement le nombre de répliques du Deployment annuaire, ArgoCD restaure la valeur déclarée dans Git. Cette option serait dangereuse pendant un diagnostic d'urgence si une correction manuelle indispensable était immédiatement écrasée avant d'avoir pu être reportée dans Git.
+
+`prune: true` autorise ArgoCD à supprimer une ressource réelle lorsqu'elle n'existe plus dans la source Git rendue. Par exemple, retirer le template du Service entraîne la suppression du Service Kubernetes. Cette option serait dangereuse si le chemin source était accidentellement modifié vers un dossier vide ou si une ressource importante était retirée du dépôt par erreur : ArgoCD pourrait propager immédiatement cette suppression.

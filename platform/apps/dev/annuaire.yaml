@@ -11,7 +11,9 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: devhub
+  # La première Application utilise le projet intégré. Elle sera déplacée
+  # dans l'AppProject `devhub` à l'étape 6.
+  project: default
 
   source:
     # TODO : URL de votre fork.
@@ -30,8 +32,6 @@ spec:
     namespace: devhub-dev
 
   syncPolicy:
-    # TODO étape 5 : commencez en manuel (commentez le bloc automated).
-    # Puis basculez en auto avec selfHeal:true / prune:false une fois validé.
     automated:
       prune: false
       selfHeal: true
