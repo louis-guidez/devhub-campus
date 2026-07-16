@@ -14,9 +14,9 @@ namespace:
   createResource: false
 
 configMap:
-  scenarioVersion: notification-failure
+  scenarioVersion: baseline
   immutable: true
-  scenarioValue: notification-failure
+  scenarioValue: baseline
 
 service:
   type: ClusterIP
